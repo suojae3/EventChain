@@ -5,6 +5,7 @@ public class EventChainBuilder<DataType> {
     private enum EventType {
         case producer(() -> DataType)
         case consumer((DataType) -> Void)
+        case transformer((DataType) -> DataType)
     }
 
     private var events: [(event: EventType, description: String)] = []
@@ -23,19 +24,29 @@ public class EventChainBuilder<DataType> {
         events.append((event: .consumer(event), description: description))
     }
 
-    public func build() -> () -> Void {
+    public func addChainingEvent(_ description: String, event: @escaping (DataType) -> DataType) {
+        events.append((event: .transformer(event), description: description))
+    }
+
+    public func build() -> () -> DataType? {
         return {
             var sharedData: DataType?
             for eventTuple in self.events {
                 switch eventTuple.event {
                 case .producer(let producer):
                     sharedData = producer()
-                case .consumer(let consumer) where sharedData != nil:
-                    consumer(sharedData!)
-                default:
-                    break
+                case .consumer(let consumer):
+                    if let data = sharedData {
+                        consumer(data)
+                        sharedData = nil
+                    }
+                case .transformer(let transformer):
+                    if let data = sharedData {
+                        sharedData = transformer(data)
+                    }
                 }
             }
+            return sharedData
         }
     }
 
