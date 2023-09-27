@@ -1,15 +1,10 @@
-// MARK: - Event Type
-
-public typealias ProducerEvent = () -> String
-public typealias ConsumerEvent = (String) -> Void
-
 // MARK: - EventChainBuilder
 
-public class EventChainBuilder {
+public class EventChainBuilder<DataType> {
     
     private enum EventType {
-        case producer(ProducerEvent)
-        case consumer(ConsumerEvent)
+        case producer(() -> DataType)
+        case consumer((DataType) -> Void)
     }
 
     private var events: [(event: EventType, description: String)] = []
@@ -20,32 +15,27 @@ public class EventChainBuilder {
         events.reserveCapacity(count)
     }
 
-    public func addProducerEvent(_ description: String, event: @escaping ProducerEvent) {
+    public func addProducerEvent(_ description: String, event: @escaping () -> DataType) {
         events.append((event: .producer(event), description: description))
     }
 
-    public func addConsumerEvent(_ description: String, event: @escaping ConsumerEvent) {
+    public func addConsumerEvent(_ description: String, event: @escaping (DataType) -> Void) {
         events.append((event: .consumer(event), description: description))
     }
 
     public func build() -> () -> Void {
         return {
-            var sharedData: String?
+            var sharedData: DataType?
             for eventTuple in self.events {
-                sharedData = self.execute(eventTuple, with: sharedData)
+                switch eventTuple.event {
+                case .producer(let producer):
+                    sharedData = producer()
+                case .consumer(let consumer) where sharedData != nil:
+                    consumer(sharedData!)
+                default:
+                    break
+                }
             }
-        }
-    }
-
-    private func execute(_ eventTuple: (event: EventType, description: String), with data: String?) -> String? {
-        switch eventTuple.event {
-        case .producer(let producer):
-            return producer()
-        case .consumer(let consumer):
-            if let data = data {
-                consumer(data)
-            }
-            return nil
         }
     }
 
