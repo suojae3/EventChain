@@ -1,19 +1,18 @@
-// MARK: - Internal Shared Context
-
-class ChainContext {
-    var data: [String: Any] = [:]
-}
-
 // MARK: - Event Type
 
-typealias ChainEvent = (ChainContext) -> Void
-public typealias UserEvent = () -> Void
+public typealias ProducerEvent = () -> String
+public typealias ConsumerEvent = (String) -> Void
 
 // MARK: - EventChainBuilder
 
 public class EventChainBuilder {
-    private var events: [(event: ChainEvent, description: String)] = []
-    private let context = ChainContext()
+    
+    private enum EventType {
+        case producer(ProducerEvent)
+        case consumer(ConsumerEvent)
+    }
+
+    private var events: [(event: EventType, description: String)] = []
     
     public init() {}
 
@@ -21,30 +20,32 @@ public class EventChainBuilder {
         events.reserveCapacity(count)
     }
 
-    public func addEvent(_ description: String, event: @escaping UserEvent) {
-        let chainEvent: ChainEvent = { _ in
-            event()
-        }
-        events.append((event: chainEvent, description: description))
+    public func addProducerEvent(_ description: String, event: @escaping ProducerEvent) {
+        events.append((event: .producer(event), description: description))
     }
 
-    public func insertEvent(at index: Int, description: String, event: @escaping UserEvent) {
-        guard index >= 0 && index <= events.count else {
-            print("Invalid index. Event not inserted.")
-            return
-        }
-        
-        let chainEvent: ChainEvent = { _ in
-            event()
-        }
-        events.insert((event: chainEvent, description: description), at: index)
+    public func addConsumerEvent(_ description: String, event: @escaping ConsumerEvent) {
+        events.append((event: .consumer(event), description: description))
     }
 
-    public func build() -> UserEvent {
+    public func build() -> () -> Void {
         return {
+            var sharedData: String?
             for eventTuple in self.events {
-                eventTuple.event(self.context)
+                sharedData = self.execute(eventTuple, with: sharedData)
             }
+        }
+    }
+
+    private func execute(_ eventTuple: (event: EventType, description: String), with data: String?) -> String? {
+        switch eventTuple.event {
+        case .producer(let producer):
+            return producer()
+        case .consumer(let consumer):
+            if let data = data {
+                consumer(data)
+            }
+            return nil
         }
     }
 
