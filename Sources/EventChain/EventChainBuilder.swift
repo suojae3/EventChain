@@ -1,8 +1,10 @@
 import Foundation
 
-public class ReactiveEventChainBuilder<DataType> {
+public class EventChainBuilder<DataType> {
     
     private var events: [(event: EventType<DataType>, description: String)] = []
+    
+    private let semaphore = DispatchSemaphore(value: 0)
     
     public init() {}
     
@@ -11,15 +13,29 @@ public class ReactiveEventChainBuilder<DataType> {
     }
     
     public func addProducerEvent(_ description: String, event: @escaping () -> DataType) {
-        events.append((event: .producer(event), description: description))
+        let asyncEvent: () -> DataType = {
+            let result = event()
+            self.semaphore.signal()
+            return result
+        }
+        events.append((event: .producer(asyncEvent), description: description))
     }
     
     public func addConsumerEvent(_ description: String, event: @escaping (DataType) -> Void) {
-        events.append((event: .consumer(event), description: description))
+        let asyncEvent: (DataType) -> Void = { data in
+            event(data)
+            self.semaphore.signal()
+        }
+        events.append((event: .consumer(asyncEvent), description: description))
     }
     
     public func addChainingEvent(_ description: String, event: @escaping (DataType) -> DataType) {
-        events.append((event: .transformer(event), description: description))
+        let asyncEvent: (DataType) -> DataType = { data in
+            let result = event(data)
+            self.semaphore.signal()
+            return result
+        }
+        events.append((event: .chaining(asyncEvent), description: description))
     }
     
     public func build() -> () -> DataType? {
@@ -29,14 +45,18 @@ public class ReactiveEventChainBuilder<DataType> {
                 switch eventTuple.event {
                 case .producer(let producer):
                     sharedData = producer()
+                    self.semaphore.wait()
+                    
                 case .consumer(let consumer):
                     if let data = sharedData {
                         consumer(data)
                         sharedData = nil
+                        self.semaphore.wait()
                     }
-                case .transformer(let transformer):
+                case .chaining(let chaining):
                     if let data = sharedData {
-                        sharedData = transformer(data)
+                        sharedData = chaining(data)
+                        self.semaphore.wait()
                     }
                 }
             }
@@ -51,9 +71,8 @@ public class ReactiveEventChainBuilder<DataType> {
         }
     }
     
-    public func bindToObservable(_ observable: Observable<DataType>) {
-        observable.bind { [weak self] _ in
-            self?.build()()
-        }
+    public func executeChain() -> DataType? {
+        let chain = build()
+        return chain()
     }
 }

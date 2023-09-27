@@ -1,6 +1,8 @@
 import Foundation
 
 public class Observable<DataType> {
+    
+    
     public typealias Observer = (DataType) -> Void
     
     private var observers: [Observer] = []
