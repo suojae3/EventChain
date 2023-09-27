@@ -14,6 +14,8 @@ public typealias UserEvent = () -> Void
 public class EventChainBuilder {
     private var events: [(event: ChainEvent, description: String)] = []
     private let context = ChainContext()
+    
+    public init() {}
 
     public func setEventCount(_ count: Int) {
         events.reserveCapacity(count)
