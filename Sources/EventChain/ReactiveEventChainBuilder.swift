@@ -1,33 +1,27 @@
-// MARK: - EventChainBuilder
+import Foundation
 
-public class EventChainBuilder<DataType> {
+public class ReactiveEventChainBuilder<DataType> {
     
-    private enum EventType {
-        case producer(() -> DataType)
-        case consumer((DataType) -> Void)
-        case transformer((DataType) -> DataType)
-    }
-
-    private var events: [(event: EventType, description: String)] = []
+    private var events: [(event: EventType<DataType>, description: String)] = []
     
     public init() {}
-
+    
     public func setEventCount(_ count: Int) {
         events.reserveCapacity(count)
     }
-
+    
     public func addProducerEvent(_ description: String, event: @escaping () -> DataType) {
         events.append((event: .producer(event), description: description))
     }
-
+    
     public func addConsumerEvent(_ description: String, event: @escaping (DataType) -> Void) {
         events.append((event: .consumer(event), description: description))
     }
-
+    
     public func addChainingEvent(_ description: String, event: @escaping (DataType) -> DataType) {
         events.append((event: .transformer(event), description: description))
     }
-
+    
     public func build() -> () -> DataType? {
         return {
             var sharedData: DataType?
@@ -49,11 +43,17 @@ public class EventChainBuilder<DataType> {
             return sharedData
         }
     }
-
+    
     public func describeChain() {
         print("Logic of the chain:")
         for (index, eventTuple) in events.enumerated() {
             print("\(index + 1). \(eventTuple.description)")
+        }
+    }
+    
+    public func bindToObservable(_ observable: Observable<DataType>) {
+        observable.bind { [weak self] _ in
+            self?.build()()
         }
     }
 }
